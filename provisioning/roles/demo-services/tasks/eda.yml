@@ -1,0 +1,58 @@
+---
+# EDA (Event-Driven Ansible) Configuration
+
+- name: Deploy EDA storm mode rulebook
+  ansible.builtin.template:
+    src: eda/storm_mode.yml.j2
+    dest: "{{ callansible_dir }}/eda/rulebooks/storm_mode.yml"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy EDA inventory
+  ansible.builtin.copy:
+    content: |
+      ---
+      all:
+        hosts:
+          localhost:
+            ansible_connection: local
+    dest: "{{ callansible_dir }}/eda/inventory/hosts.yml"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy sample weather alert event
+  ansible.builtin.copy:
+    content: |
+      {
+        "alert_type": "weather",
+        "severity": 4,
+        "action": "activate",
+        "region": "us-east-1",
+        "duration": 120,
+        "request_id": "storm-2025-01-29-001",
+        "source": "national_weather_service",
+        "headline": "Severe Thunderstorm Warning",
+        "description": "Damaging winds and large hail expected",
+        "effective": "2025-01-29T14:00:00Z",
+        "expires": "2025-01-29T16:00:00Z"
+      }
+    dest: "{{ callansible_dir }}/eda/test_events/weather_alert.json"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy all-clear event
+  ansible.builtin.copy:
+    content: |
+      {
+        "alert_type": "weather",
+        "action": "clear",
+        "region": "us-east-1",
+        "request_id": "storm-2025-01-29-001"
+      }
+    dest: "{{ callansible_dir }}/eda/test_events/weather_clear.json"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'

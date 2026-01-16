@@ -1,0 +1,54 @@
+---
+- name: Storm Mode Verify
+  hosts: localhost
+  gather_facts: false
+  vars:
+    region: "{{ '{{' }} region | default('us-east-1') {{ '}}' }}"
+    request_id: "{{ '{{' }} request_id | default('unknown') {{ '}}' }}"
+
+  tasks:
+    - name: Verify SSH accessible
+      wait_for:
+        host: 127.0.0.1
+        port: 22
+        timeout: 5
+      register: ssh_check
+      ignore_errors: true
+
+    - name: Verify HTTPS accessible
+      uri:
+        url: "https://localhost:443/api/v2/ping/"
+        validate_certs: false
+        timeout: 5
+      register: https_check
+      ignore_errors: true
+
+    - name: Verify nonessential blocked
+      wait_for:
+        host: 127.0.0.1
+        port: 8080
+        timeout: 3
+      register: blocked_check
+      ignore_errors: true
+
+    - name: Compile verification results
+      set_fact:
+        verify_result:
+          ssh_accessible: "{{ '{{' }} ssh_check is success {{ '}}' }}"
+          https_accessible: "{{ '{{' }} https_check is success {{ '}}' }}"
+          nonessential_blocked: "{{ '{{' }} blocked_check is failed {{ '}}' }}"
+          overall_pass: "{{ '{{' }} ssh_check is success and https_check is success and blocked_check is failed {{ '}}' }}"
+
+    - name: Report verification status
+      debug:
+        msg: |
+          Storm Mode Verification for {{ '{{' }} region {{ '}}' }} ({{ '{{' }} request_id {{ '}}' }}):
+          - SSH: {{ '{{' }} 'OK' if verify_result.ssh_accessible else 'FAIL' {{ '}}' }}
+          - HTTPS: {{ '{{' }} 'OK' if verify_result.https_accessible else 'FAIL' {{ '}}' }}
+          - Nonessential blocked: {{ '{{' }} 'OK' if verify_result.nonessential_blocked else 'FAIL' {{ '}}' }}
+          - Overall: {{ '{{' }} 'PASS' if verify_result.overall_pass else 'FAIL' {{ '}}' }}
+
+    - name: Fail if verification unsuccessful
+      fail:
+        msg: "Storm mode verification FAILED - triggering rollback"
+      when: not verify_result.overall_pass

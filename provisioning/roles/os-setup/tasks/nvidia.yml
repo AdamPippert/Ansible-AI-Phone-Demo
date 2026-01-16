@@ -1,0 +1,121 @@
+---
+# NVIDIA GPU Setup for RTX 5070 Mobile
+#
+# Behavior controlled by os_full_rebuild variable:
+#   false (default): Install missing packages, configure CDI if needed
+#   true: Full setup including initramfs rebuild
+
+# =============================================================================
+# RPM Fusion Repositories
+# =============================================================================
+
+- name: Enable RPM Fusion repositories
+  ansible.builtin.dnf:
+    name:
+      - "https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-{{ ansible_distribution_major_version }}.noarch.rpm"
+      - "https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{{ ansible_distribution_major_version }}.noarch.rpm"
+    state: present
+    disable_gpg_check: true
+  register: rpmfusion_install
+  failed_when: false
+
+# =============================================================================
+# NVIDIA Driver Installation
+# =============================================================================
+
+- name: Check if NVIDIA driver is already installed
+  ansible.builtin.command: nvidia-smi --query-gpu=driver_version --format=csv,noheader
+  register: nvidia_driver_check
+  changed_when: false
+  failed_when: false
+
+- name: Display current NVIDIA driver status
+  ansible.builtin.debug:
+    msg: "NVIDIA driver {{ nvidia_driver_check.stdout | default('not installed') | trim }}"
+
+- name: Install NVIDIA driver packages
+  ansible.builtin.dnf:
+    name: "{{ nvidia_packages }}"
+    state: present
+  register: nvidia_driver_install
+  when: nvidia_driver_check.rc != 0 or os_full_rebuild | default(false)
+
+# =============================================================================
+# NVIDIA Container Toolkit
+# =============================================================================
+
+- name: Add NVIDIA container toolkit repository
+  ansible.builtin.get_url:
+    url: https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo
+    dest: /etc/yum.repos.d/nvidia-container-toolkit.repo
+    mode: '0644'
+
+- name: Install NVIDIA container toolkit
+  ansible.builtin.dnf:
+    name: "{{ nvidia_container_packages }}"
+    state: present
+
+- name: Check if NVIDIA CDI is configured
+  ansible.builtin.stat:
+    path: /etc/cdi/nvidia.yaml
+  register: nvidia_cdi_file
+
+- name: Configure NVIDIA container toolkit for Podman (CDI)
+  ansible.builtin.command: nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+  when: not nvidia_cdi_file.stat.exists or os_full_rebuild | default(false)
+  register: nvidia_cdi_generate
+
+- name: Display NVIDIA CDI status
+  ansible.builtin.debug:
+    msg: "NVIDIA CDI configuration: {{ 'present' if nvidia_cdi_file.stat.exists or nvidia_cdi_generate.changed | default(false) else 'missing' }}"
+
+# =============================================================================
+# Kernel Module Configuration
+# =============================================================================
+
+- name: Load nvidia modules at boot
+  ansible.builtin.copy:
+    content: |
+      nvidia
+      nvidia_modeset
+      nvidia_uvm
+      nvidia_drm
+    dest: /etc/modules-load.d/nvidia.conf
+    mode: '0644'
+  register: nvidia_modules_config
+
+- name: Set NVIDIA kernel parameters
+  ansible.builtin.copy:
+    content: |
+      options nvidia NVreg_PreserveVideoMemoryAllocations=1
+      options nvidia-drm modeset=1
+    dest: /etc/modprobe.d/nvidia.conf
+    mode: '0644'
+  register: nvidia_kernel_params
+
+# =============================================================================
+# Initramfs Rebuild (full rebuild mode only)
+# =============================================================================
+
+- name: Rebuild initramfs (full rebuild mode)
+  ansible.builtin.command: dracut -f
+  when:
+    - os_full_rebuild | default(false)
+    - nvidia_driver_install.changed | default(false) or nvidia_modules_config.changed or nvidia_kernel_params.changed
+  register: dracut_rebuild
+  changed_when: dracut_rebuild.rc == 0
+
+# =============================================================================
+# Reboot Check
+# =============================================================================
+
+- name: Check if reboot is required for NVIDIA
+  ansible.builtin.set_fact:
+    nvidia_reboot_required: "{{ nvidia_driver_install.changed | default(false) and nvidia_driver_check.rc != 0 }}"
+
+- name: Display reboot notice if required
+  ansible.builtin.debug:
+    msg: |
+      NOTICE: A reboot is required to load the NVIDIA drivers.
+      Run 'sudo reboot' after provisioning completes.
+  when: nvidia_reboot_required | default(false)

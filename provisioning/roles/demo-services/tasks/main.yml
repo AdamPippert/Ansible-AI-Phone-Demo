@@ -1,0 +1,110 @@
+---
+# Demo Services Role - Main Tasks
+# Sets up CallAnsible demo services, configurations, and container orchestration
+
+- name: Create project directory structure
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0755'
+  loop: "{{ callansible_directories }}"
+
+- name: Include Asterisk configuration tasks
+  ansible.builtin.include_tasks: asterisk.yml
+
+- name: Include voice-bridge configuration tasks
+  ansible.builtin.include_tasks: voice-bridge.yml
+
+- name: Include playbooks deployment
+  ansible.builtin.include_tasks: playbooks.yml
+
+- name: Include EDA configuration tasks
+  ansible.builtin.include_tasks: eda.yml
+
+- name: Include Daytona configuration tasks
+  ansible.builtin.include_tasks: daytona.yml
+
+- name: Include scripts deployment
+  ansible.builtin.include_tasks: scripts.yml
+
+- name: Deploy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ callansible_dir }}/docker-compose.yml"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy environment template
+  ansible.builtin.template:
+    src: env.example.j2
+    dest: "{{ callansible_dir }}/.env.example"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Check if .env exists
+  ansible.builtin.stat:
+    path: "{{ callansible_dir }}/.env"
+  register: env_file
+
+- name: Copy .env.example to .env if not exists
+  ansible.builtin.copy:
+    src: "{{ callansible_dir }}/.env.example"
+    dest: "{{ callansible_dir }}/.env"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0600'
+    remote_src: true
+  when: not env_file.stat.exists
+
+- name: Create .gitignore
+  ansible.builtin.copy:
+    content: |
+      # Environment files
+      .env
+      *.env.local
+
+      # Audio files (runtime generated)
+      audio/*.wav
+      audio/*.raw
+      audio/*.mp3
+
+      # Models (downloaded separately)
+      models/piper/*.onnx
+      models/piper/*.onnx.json
+
+      # AWX/AAP data
+      aap-data/
+
+      # Python
+      __pycache__/
+      *.py[cod]
+      *$py.class
+      .venv/
+      venv/
+
+      # IDE
+      .vscode/
+      .idea/
+
+      # Logs
+      *.log
+
+      # Backup rules
+      /opt/storm_mode/
+    dest: "{{ callansible_dir }}/.gitignore"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Create storm mode backup directory
+  ansible.builtin.file:
+    path: /opt/storm_mode
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  become: true

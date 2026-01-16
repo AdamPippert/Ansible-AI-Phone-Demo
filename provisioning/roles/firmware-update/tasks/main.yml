@@ -1,0 +1,183 @@
+---
+# Firmware Update Role - Main Tasks
+# Updates BIOS and component firmware on Framework 16 using fwupd/LVFS
+#
+# IMPORTANT: This role should run FIRST before any other provisioning
+# as firmware updates require reboots and a stable base system.
+
+- name: Install fwupd packages
+  ansible.builtin.dnf:
+    name: "{{ fwupd_packages }}"
+    state: present
+
+- name: Enable and start fwupd service
+  ansible.builtin.systemd:
+    name: fwupd
+    enabled: true
+    state: started
+
+- name: Check if running on AC power
+  ansible.builtin.shell: |
+    for supply in /sys/class/power_supply/*/type; do
+      if grep -q "Mains" "$supply" 2>/dev/null; then
+        online_file="$(dirname $supply)/online"
+        if [ -f "$online_file" ] && [ "$(cat $online_file)" = "1" ]; then
+          echo "true"
+          exit 0
+        fi
+      fi
+    done
+    echo "false"
+  register: ac_power_check
+  changed_when: false
+
+- name: Warn if not on AC power
+  ansible.builtin.debug:
+    msg: |
+      WARNING: System does not appear to be on AC power.
+      Firmware updates require AC power to be connected.
+      Some updates may not be available or may fail.
+  when: ac_power_check.stdout == "false"
+
+- name: Pause if not on AC power (interactive mode)
+  ansible.builtin.pause:
+    prompt: "Please connect AC power and press Enter to continue (or Ctrl+C to abort)"
+  when:
+    - ac_power_check.stdout == "false"
+    - firmware_require_ac_power | default(true)
+    - not firmware_skip_ac_check | default(false)
+
+- name: Enable LVFS testing remote (for latest Framework firmware)
+  ansible.builtin.command: fwupdmgr enable-remote lvfs-testing
+  register: enable_testing
+  changed_when: "'already enabled' not in enable_testing.stdout"
+  failed_when: false
+  when: firmware_enable_testing_channel | default(true)
+
+- name: Refresh fwupd metadata
+  ansible.builtin.command: fwupdmgr refresh --force
+  register: fwupd_refresh
+  changed_when: fwupd_refresh.rc == 0
+  failed_when: false
+
+- name: Get current firmware versions (JSON)
+  ansible.builtin.command: fwupdmgr get-devices --json
+  register: fwupd_devices_json
+  changed_when: false
+  failed_when: false
+
+- name: Parse current firmware information
+  ansible.builtin.set_fact:
+    current_firmware: "{{ fwupd_devices_json.stdout | from_json }}"
+  when: fwupd_devices_json.rc == 0
+
+- name: Display current firmware versions
+  ansible.builtin.debug:
+    msg: |
+      Current Firmware Status:
+      {% if current_firmware is defined and current_firmware.Devices is defined %}
+      {% for device in current_firmware.Devices %}
+      {% if device.Version is defined %}
+      - {{ device.Name | default('Unknown') }}: {{ device.Version }}
+      {% endif %}
+      {% endfor %}
+      {% else %}
+      Unable to retrieve firmware information
+      {% endif %}
+
+- name: Check for available firmware updates (JSON)
+  ansible.builtin.command: fwupdmgr get-updates --json
+  register: fwupd_updates_json
+  changed_when: false
+  failed_when: false
+
+- name: Parse available updates
+  ansible.builtin.set_fact:
+    available_updates: "{{ fwupd_updates_json.stdout | from_json }}"
+  when: fwupd_updates_json.rc == 0 and fwupd_updates_json.stdout | length > 2
+
+- name: Display available firmware updates
+  ansible.builtin.debug:
+    msg: |
+      Available Firmware Updates:
+      {% if available_updates is defined and available_updates.Devices is defined %}
+      {% for device in available_updates.Devices %}
+      {% if device.Releases is defined %}
+      - {{ device.Name | default('Unknown') }}:
+        Current: {{ device.Version | default('unknown') }}
+        Available: {{ device.Releases[0].Version | default('unknown') }}
+        Summary: {{ device.Releases[0].Summary | default('') }}
+      {% endif %}
+      {% endfor %}
+      {% else %}
+      No firmware updates available (system is up to date)
+      {% endif %}
+
+- name: Set update available flag
+  ansible.builtin.set_fact:
+    firmware_updates_available: "{{ available_updates is defined and available_updates.Devices is defined and (available_updates.Devices | length > 0) }}"
+
+- name: Apply firmware updates (if available and enabled)
+  ansible.builtin.command: fwupdmgr update --no-reboot --assume-yes
+  register: fwupd_update_result
+  when:
+    - firmware_updates_available | default(false)
+    - firmware_apply_updates | default(true)
+  failed_when: false
+
+- name: Display update result
+  ansible.builtin.debug:
+    msg: |
+      Firmware Update Result:
+      {{ fwupd_update_result.stdout | default('No updates applied') }}
+      {{ fwupd_update_result.stderr | default('') }}
+  when: fwupd_update_result is defined and fwupd_update_result.stdout is defined
+
+- name: Check if reboot is required for firmware updates
+  ansible.builtin.set_fact:
+    firmware_reboot_required: "{{ fwupd_update_result is defined and fwupd_update_result.rc == 0 and 'reboot' in (fwupd_update_result.stdout | default('') | lower) }}"
+
+- name: Display reboot notice
+  ansible.builtin.debug:
+    msg: |
+      ============================================
+      FIRMWARE UPDATE REQUIRES REBOOT
+      ============================================
+      Firmware updates have been staged and will be
+      applied during the next reboot.
+
+      The system will:
+      1. Reboot into firmware update mode
+      2. Apply updates (may take several minutes)
+      3. Reboot back into the OS
+
+      Run: sudo reboot
+
+      After reboot, re-run this playbook to continue
+      provisioning with remaining roles.
+      ============================================
+  when: firmware_reboot_required | default(false)
+
+- name: Create firmware update status file
+  ansible.builtin.copy:
+    content: |
+      # Firmware update status
+      # Generated: {{ ansible_date_time.iso8601 }}
+
+      updates_checked: true
+      updates_available: {{ firmware_updates_available | default(false) }}
+      updates_applied: {{ fwupd_update_result.rc | default(-1) == 0 }}
+      reboot_required: {{ firmware_reboot_required | default(false) }}
+
+      # Re-run playbook after reboot to continue provisioning
+    dest: /tmp/firmware_update_status.txt
+    mode: '0644'
+
+- name: Reboot for firmware updates (if requested)
+  ansible.builtin.reboot:
+    msg: "Rebooting to apply firmware updates"
+    reboot_timeout: 600
+    post_reboot_delay: 30
+  when:
+    - firmware_reboot_required | default(false)
+    - firmware_auto_reboot | default(false)

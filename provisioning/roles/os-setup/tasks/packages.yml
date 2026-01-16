@@ -1,0 +1,76 @@
+---
+# System Packages Installation
+#
+# Behavior controlled by os_full_rebuild variable:
+#   false (default): Install missing packages only, no cache refresh
+#   true: Full update including cache refresh and system upgrade
+
+# =============================================================================
+# Full Rebuild Mode - Update cache and upgrade system
+# =============================================================================
+
+- name: Update DNF cache (full rebuild mode)
+  ansible.builtin.dnf:
+    update_cache: true
+  when: os_full_rebuild | default(false)
+
+- name: Upgrade all packages (full rebuild mode)
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+  when: os_full_rebuild | default(false)
+  register: system_upgrade
+
+- name: Display upgrade results (full rebuild mode)
+  ansible.builtin.debug:
+    msg: "System packages upgraded. {{ system_upgrade.changed | ternary('Changes were made.', 'System was already up to date.') }}"
+  when:
+    - os_full_rebuild | default(false)
+    - system_upgrade is defined
+
+# =============================================================================
+# Prerequisites Installation (both modes)
+# =============================================================================
+
+- name: Install system packages (prerequisites)
+  ansible.builtin.dnf:
+    name: "{{ system_packages }}"
+    state: present
+  register: system_packages_result
+
+- name: Install development packages (prerequisites)
+  ansible.builtin.dnf:
+    name: "{{ dev_packages }}"
+    state: present
+  register: dev_packages_result
+
+- name: Install audio packages for testing (prerequisites)
+  ansible.builtin.dnf:
+    name: "{{ audio_packages }}"
+    state: present
+  register: audio_packages_result
+
+# =============================================================================
+# Python Setup (both modes)
+# =============================================================================
+
+- name: Ensure Python pip is up to date
+  ansible.builtin.pip:
+    name: pip
+    state: latest
+    executable: pip3
+  become: true
+  become_user: "{{ project_user }}"
+
+# =============================================================================
+# Summary
+# =============================================================================
+
+- name: Display packages installation summary
+  ansible.builtin.debug:
+    msg: |
+      Package Installation Summary:
+      - Mode: {{ 'Full Rebuild' if os_full_rebuild | default(false) else 'Prerequisites Only' }}
+      - System packages: {{ system_packages_result.changed | ternary('installed/updated', 'already present') }}
+      - Dev packages: {{ dev_packages_result.changed | ternary('installed/updated', 'already present') }}
+      - Audio packages: {{ audio_packages_result.changed | ternary('installed/updated', 'already present') }}

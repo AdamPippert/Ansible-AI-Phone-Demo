@@ -1,0 +1,177 @@
+---
+# Helper Scripts Deployment
+
+- name: Deploy setup.sh
+  ansible.builtin.copy:
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+      echo "=== CallAnsible Setup ==="
+      echo "Project directory: $PROJECT_DIR"
+
+      # Check prerequisites
+      echo -e "\n--- Checking prerequisites ---"
+      command -v podman >/dev/null 2>&1 || { echo "ERROR: podman not found"; exit 1; }
+      command -v podman-compose >/dev/null 2>&1 || { echo "ERROR: podman-compose not found"; exit 1; }
+
+      # Check GPU
+      if command -v nvidia-smi >/dev/null 2>&1; then
+          echo "GPU: $(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null || echo 'unknown')"
+      else
+          echo "WARNING: nvidia-smi not found"
+      fi
+
+      # Check Tailscale
+      if command -v tailscale >/dev/null 2>&1; then
+          echo "Tailscale IP: $(tailscale ip -4 2>/dev/null || echo 'not connected')"
+      else
+          echo "WARNING: tailscale not found"
+      fi
+
+      # Create directories
+      echo -e "\n--- Creating directories ---"
+      mkdir -p "$PROJECT_DIR"/{audio,models/piper,aap-data}
+
+      # Check .env file
+      if [[ ! -f "$PROJECT_DIR/.env" ]]; then
+          echo -e "\n--- Creating .env from template ---"
+          cp "$PROJECT_DIR/.env.example" "$PROJECT_DIR/.env"
+          echo "IMPORTANT: Edit .env file with your secrets before starting services"
+      fi
+
+      echo -e "\n=== Setup complete ==="
+      echo "Next steps:"
+      echo "  1. Edit .env with your secrets"
+      echo "  2. Run: ./scripts/download-models.sh"
+      echo "  3. Run: podman-compose up -d"
+    dest: "{{ callansible_dir }}/scripts/setup.sh"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0755'
+
+- name: Deploy download-models.sh
+  ansible.builtin.copy:
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+      MODELS_DIR="$PROJECT_DIR/models/piper"
+
+      PIPER_MODEL="{{ piper_model }}"
+      PIPER_BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0"
+
+      echo "=== Downloading Piper TTS Models ==="
+
+      mkdir -p "$MODELS_DIR"
+      cd "$MODELS_DIR"
+
+      # Download model
+      MODEL_FILE="${PIPER_MODEL}.onnx"
+      CONFIG_FILE="${PIPER_MODEL}.onnx.json"
+
+      if [[ ! -f "$MODEL_FILE" ]]; then
+          echo "Downloading $MODEL_FILE..."
+          curl -L -o "$MODEL_FILE" "${PIPER_BASE_URL}/en/en_US/lessac/medium/${MODEL_FILE}"
+      else
+          echo "$MODEL_FILE already exists, skipping"
+      fi
+
+      if [[ ! -f "$CONFIG_FILE" ]]; then
+          echo "Downloading $CONFIG_FILE..."
+          curl -L -o "$CONFIG_FILE" "${PIPER_BASE_URL}/en/en_US/lessac/medium/${CONFIG_FILE}"
+      else
+          echo "$CONFIG_FILE already exists, skipping"
+      fi
+
+      echo -e "\n=== Download complete ==="
+      ls -lh "$MODELS_DIR"
+    dest: "{{ callansible_dir }}/scripts/download-models.sh"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0755'
+
+- name: Deploy test-call.sh
+  ansible.builtin.copy:
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+      source "$PROJECT_DIR/.env" 2>/dev/null || true
+
+      echo "=== CallAnsible Connection Tests ==="
+
+      # Test Asterisk
+      echo -e "\n--- Asterisk Status ---"
+      podman exec asterisk asterisk -rx "core show version" 2>/dev/null || echo "Asterisk not running"
+      podman exec asterisk asterisk -rx "pjsip show endpoints" 2>/dev/null || echo "PJSIP not available"
+
+      # Test ARI
+      echo -e "\n--- ARI Connection ---"
+      ARI_PASSWORD="${ARI_PASSWORD:-changeme_ari_password}"
+      curl -s -u "voice-bridge:$ARI_PASSWORD" http://localhost:{{ asterisk_ari_port }}/ari/asterisk/info | jq -r '.system.entity_id // "ARI not responding"' 2>/dev/null || echo "ARI not responding"
+
+      # Test vLLM
+      echo -e "\n--- vLLM Health ---"
+      curl -s http://localhost:{{ vllm_port }}/health 2>/dev/null && echo "vLLM healthy" || echo "vLLM not responding"
+
+      # Test AAP
+      echo -e "\n--- AAP Status ---"
+      curl -sk https://localhost:{{ aap_https_port }}/api/v2/ping/ 2>/dev/null | jq -r '.ha // "AAP not responding"' || echo "AAP not responding"
+
+      # Test EDA
+      echo -e "\n--- EDA Webhook ---"
+      curl -s http://localhost:{{ eda_webhook_port }}/health 2>/dev/null && echo "EDA healthy" || echo "EDA not responding (may be normal)"
+
+      echo -e "\n=== Tests complete ==="
+    dest: "{{ callansible_dir }}/scripts/test-call.sh"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0755'
+
+- name: Deploy inject-weather-alert.sh
+  ansible.builtin.copy:
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+      PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+      ACTION="${1:-activate}"
+      EDA_URL="${EDA_URL:-http://localhost:{{ eda_webhook_port }}/endpoint}"
+
+      case "$ACTION" in
+          activate|alert)
+              echo "Injecting weather alert (activate)..."
+              curl -X POST "$EDA_URL" \
+                  -H "Content-Type: application/json" \
+                  -d @"$PROJECT_DIR/eda/test_events/weather_alert.json"
+              ;;
+          clear|rollback)
+              echo "Injecting weather all-clear..."
+              curl -X POST "$EDA_URL" \
+                  -H "Content-Type: application/json" \
+                  -d @"$PROJECT_DIR/eda/test_events/weather_clear.json"
+              ;;
+          *)
+              echo "Usage: $0 [activate|clear]"
+              echo "  activate - Send severe weather alert"
+              echo "  clear    - Send all-clear to rollback"
+              exit 1
+              ;;
+      esac
+
+      echo -e "\n\nEvent injected. Check EDA logs: podman-compose logs -f eda"
+    dest: "{{ callansible_dir }}/scripts/inject-weather-alert.sh"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0755'

@@ -1,0 +1,150 @@
+---
+# CallAnsible Demo - Global Variables
+
+# =============================================================================
+# Provisioning Mode
+# =============================================================================
+# Set to true for full OS rebuild (reinstall all packages, reconfigure system)
+# Set to false (default) to just update packages and install prerequisites
+os_full_rebuild: false
+
+# Skip firmware updates entirely (useful for re-provisioning)
+skip_firmware: false
+
+# =============================================================================
+# Project Configuration
+# =============================================================================
+project_name: callansible
+project_root: /home/adam/Development/Ansible-AI-Phone-Demo
+callansible_dir: "{{ project_root }}/CallAnsible"
+
+# User that will own the project files
+project_user: adam
+project_group: adam
+
+# =============================================================================
+# System Packages
+# =============================================================================
+system_packages:
+  - git
+  - curl
+  - wget
+  - vim
+  - htop
+  - jq
+  - python3
+  - python3-pip
+  - make
+  - gcc
+  - gcc-c++
+
+# Development packages for building Python extensions
+dev_packages:
+  - python3-devel
+  - libffi-devel
+  - openssl-devel
+
+# Audio packages (for testing/debugging)
+audio_packages:
+  - pulseaudio-utils
+  - alsa-utils
+  - sox
+
+# =============================================================================
+# NVIDIA Configuration
+# =============================================================================
+nvidia_packages:
+  - akmod-nvidia
+  - xorg-x11-drv-nvidia-cuda
+  - nvidia-settings
+  - nvidia-smi
+
+nvidia_container_packages:
+  - nvidia-container-toolkit
+
+# GPU memory utilization for vLLM (0.55 = 55% of 8GB = ~4.4GB)
+vllm_gpu_memory_utilization: "0.55"
+
+# =============================================================================
+# Podman Configuration
+# =============================================================================
+podman_packages:
+  - podman
+  - podman-compose
+  - buildah
+  - skopeo
+  - slirp4netns
+  - fuse-overlayfs
+
+# Enable rootless podman for the project user
+podman_rootless: true
+
+# =============================================================================
+# Tailscale Configuration
+# =============================================================================
+tailscale_enabled: true
+tailscale_up_args: "--accept-routes"
+
+# =============================================================================
+# Container Images
+# =============================================================================
+container_images:
+  vllm: "docker.io/vllm/vllm-openai:latest"
+  asterisk: "docker.io/andrius/asterisk:latest"
+  python: "docker.io/python:3.11-slim"
+  awx: "quay.io/ansible/awx:latest"
+  eda: "quay.io/ansible/ansible-rulebook:latest"
+
+# =============================================================================
+# vLLM Configuration
+# =============================================================================
+vllm_model: "Qwen/Qwen2.5-7B-Instruct-AWQ"
+vllm_quantization: "awq"
+vllm_max_model_len: 4096
+vllm_port: 8000
+
+# =============================================================================
+# Asterisk Configuration
+# =============================================================================
+asterisk_sip_port: 5060
+asterisk_ari_port: 8088
+asterisk_ari_ws_port: 8089
+asterisk_rtp_start: 10000
+asterisk_rtp_end: 10100
+
+# =============================================================================
+# Voice Bridge Configuration
+# =============================================================================
+voice_bridge_port: 8080
+whisper_model: "small.en"
+whisper_device: "cpu"
+piper_model: "en_US-lessac-medium"
+
+# =============================================================================
+# AAP/AWX Configuration
+# =============================================================================
+aap_https_port: 443
+aap_api_port: 8043
+
+# =============================================================================
+# EDA Configuration
+# =============================================================================
+eda_webhook_port: 5000
+
+# =============================================================================
+# Directory Structure
+# =============================================================================
+callansible_directories:
+  - "{{ callansible_dir }}"
+  - "{{ callansible_dir }}/asterisk"
+  - "{{ callansible_dir }}/voice-bridge"
+  - "{{ callansible_dir }}/models/piper"
+  - "{{ callansible_dir }}/playbooks"
+  - "{{ callansible_dir }}/audio"
+  - "{{ callansible_dir }}/scripts"
+  - "{{ callansible_dir }}/eda/rulebooks"
+  - "{{ callansible_dir }}/eda/inventory"
+  - "{{ callansible_dir }}/eda/test_events"
+  - "{{ callansible_dir }}/openprose/schemas"
+  - "{{ callansible_dir }}/daytona"
+  - "{{ callansible_dir }}/aap-data"

@@ -1,0 +1,124 @@
+---
+# Podman Setup Role - Main Tasks
+# Configures Podman with NVIDIA GPU support for containerized services
+
+- name: Install Podman packages
+  ansible.builtin.dnf:
+    name: "{{ podman_packages }}"
+    state: present
+
+- name: Enable Podman socket for user
+  ansible.builtin.systemd:
+    name: podman.socket
+    enabled: true
+    state: started
+    scope: user
+  become: true
+  become_user: "{{ project_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid | default(1000) }}"
+
+- name: Create containers configuration directory
+  ansible.builtin.file:
+    path: "/home/{{ project_user }}/.config/containers"
+    state: directory
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0755'
+
+- name: Configure containers storage
+  ansible.builtin.copy:
+    content: |
+      [storage]
+      driver = "overlay"
+      runroot = "/run/user/{{ ansible_user_uid | default(1000) }}/containers"
+      graphroot = "/home/{{ project_user }}/.local/share/containers/storage"
+
+      [storage.options]
+      mount_program = "/usr/bin/fuse-overlayfs"
+
+      [storage.options.overlay]
+      mount_program = "/usr/bin/fuse-overlayfs"
+    dest: "/home/{{ project_user }}/.config/containers/storage.conf"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Configure containers registries
+  ansible.builtin.copy:
+    content: |
+      unqualified-search-registries = ["docker.io", "quay.io", "ghcr.io"]
+
+      [[registry]]
+      location = "docker.io"
+
+      [[registry]]
+      location = "quay.io"
+    dest: "/home/{{ project_user }}/.config/containers/registries.conf"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Configure Podman for NVIDIA GPU access
+  ansible.builtin.copy:
+    content: |
+      [containers]
+      devices = ["/dev/nvidia0", "/dev/nvidiactl", "/dev/nvidia-uvm", "/dev/nvidia-uvm-tools"]
+
+      [engine]
+      cgroup_manager = "systemd"
+      events_logger = "journald"
+      runtime = "crun"
+    dest: "/home/{{ project_user }}/.config/containers/containers.conf"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Verify NVIDIA CDI is configured
+  ansible.builtin.stat:
+    path: /etc/cdi/nvidia.yaml
+  register: nvidia_cdi
+
+- name: Display NVIDIA CDI warning if missing
+  ansible.builtin.debug:
+    msg: "WARNING: NVIDIA CDI not configured. Run 'sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml'"
+  when: not nvidia_cdi.stat.exists
+
+- name: Enable lingering for user (allows rootless services to persist)
+  ansible.builtin.command: loginctl enable-linger {{ project_user }}
+  args:
+    creates: /var/lib/systemd/linger/{{ project_user }}
+
+- name: Pull required container images
+  containers.podman.podman_image:
+    name: "{{ item }}"
+    state: present
+  become: true
+  become_user: "{{ project_user }}"
+  loop: "{{ container_images.values() | list }}"
+  register: image_pull
+  retries: 3
+  delay: 10
+  until: image_pull is succeeded
+  when: pull_images | default(true)
+
+- name: Verify Podman installation
+  ansible.builtin.command: podman --version
+  register: podman_version
+  changed_when: false
+
+- name: Display Podman version
+  ansible.builtin.debug:
+    msg: "Podman version: {{ podman_version.stdout }}"
+
+- name: Verify GPU access in Podman
+  ansible.builtin.command: podman run --rm --device nvidia.com/gpu=all docker.io/nvidia/cuda:12.0-base nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
+  become: true
+  become_user: "{{ project_user }}"
+  register: gpu_test
+  changed_when: false
+  failed_when: false
+
+- name: Display GPU test result
+  ansible.builtin.debug:
+    msg: "{{ 'GPU detected: ' + gpu_test.stdout if gpu_test.rc == 0 else 'GPU not accessible in containers. Check NVIDIA driver and CDI configuration.' }}"

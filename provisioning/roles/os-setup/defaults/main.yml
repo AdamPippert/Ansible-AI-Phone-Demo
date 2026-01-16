@@ -1,0 +1,65 @@
+---
+# OS Setup Role - Default Variables
+
+# =============================================================================
+# Provisioning Mode
+# =============================================================================
+# Set to true for full OS rebuild (update cache, upgrade all, reinstall drivers)
+# Set to false (default) to just install prerequisites if missing
+os_full_rebuild: false
+
+# =============================================================================
+# System Packages
+# =============================================================================
+system_packages:
+  - git
+  - curl
+  - wget
+  - vim
+  - htop
+  - jq
+  - python3
+  - python3-pip
+  - make
+  - gcc
+  - gcc-c++
+
+dev_packages:
+  - python3-devel
+  - libffi-devel
+  - openssl-devel
+
+audio_packages:
+  - pulseaudio-utils
+  - alsa-utils
+  - sox
+
+# =============================================================================
+# NVIDIA Configuration
+# =============================================================================
+nvidia_packages:
+  - akmod-nvidia
+  - xorg-x11-drv-nvidia-cuda
+  - nvidia-settings
+
+nvidia_container_packages:
+  - nvidia-container-toolkit
+
+# =============================================================================
+# Tailscale Configuration
+# =============================================================================
+tailscale_enabled: true
+tailscale_up_args: "--accept-routes"
+
+# =============================================================================
+# Port Defaults (for firewall)
+# =============================================================================
+asterisk_sip_port: 5060
+asterisk_ari_port: 8088
+asterisk_ari_ws_port: 8089
+asterisk_rtp_start: 10000
+asterisk_rtp_end: 10100
+vllm_port: 8000
+voice_bridge_port: 8080
+aap_https_port: 443
+eda_webhook_port: 5000

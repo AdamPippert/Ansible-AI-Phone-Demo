@@ -1,0 +1,42 @@
+---
+# Asterisk Configuration Deployment
+
+- name: Deploy pjsip.conf
+  ansible.builtin.template:
+    src: asterisk/pjsip.conf.j2
+    dest: "{{ callansible_dir }}/asterisk/pjsip.conf"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy extensions.conf
+  ansible.builtin.template:
+    src: asterisk/extensions.conf.j2
+    dest: "{{ callansible_dir }}/asterisk/extensions.conf"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy ari.conf
+  ansible.builtin.template:
+    src: asterisk/ari.conf.j2
+    dest: "{{ callansible_dir }}/asterisk/ari.conf"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy http.conf
+  ansible.builtin.template:
+    src: asterisk/http.conf.j2
+    dest: "{{ callansible_dir }}/asterisk/http.conf"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy rtp.conf
+  ansible.builtin.template:
+    src: asterisk/rtp.conf.j2
+    dest: "{{ callansible_dir }}/asterisk/rtp.conf"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'

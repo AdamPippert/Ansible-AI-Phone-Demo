@@ -1,0 +1,9 @@
+---
+# Demo Services Role - Handlers
+
+- name: Restart podman services
+  ansible.builtin.command: podman-compose restart
+  args:
+    chdir: "{{ callansible_dir }}"
+  become: true
+  become_user: "{{ project_user }}"

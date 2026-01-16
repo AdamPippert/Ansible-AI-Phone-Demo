@@ -1,0 +1,97 @@
+---
+# Daytona Sandbox Configuration
+
+- name: Deploy Daytona network policy
+  ansible.builtin.template:
+    src: daytona/policy.yml.j2
+    dest: "{{ callansible_dir }}/daytona/policy.yml"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy Daytona MCP configuration
+  ansible.builtin.copy:
+    content: |
+      {
+        "name": "daytona-callansible",
+        "version": "1.0.0",
+        "description": "Daytona MCP server for CallAnsible validation",
+        "capabilities": {
+          "sandbox": {
+            "create": true,
+            "destroy": true,
+            "execute": true,
+            "file_read": true,
+            "file_write": true
+          }
+        },
+        "default_policy": "daytona/policy.yml"
+      }
+    dest: "{{ callansible_dir }}/daytona/mcp_config.json"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy OpenProse incident workflow
+  ansible.builtin.template:
+    src: openprose/storm_mode_incident.prose.j2
+    dest: "{{ callansible_dir }}/openprose/storm_mode_incident.prose"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy OpenProse weather alert schema
+  ansible.builtin.copy:
+    content: |
+      {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Weather Alert Event",
+        "type": "object",
+        "required": ["alert_type", "severity", "region", "request_id"],
+        "properties": {
+          "alert_type": {
+            "type": "string",
+            "enum": ["weather"]
+          },
+          "severity": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "action": {
+            "type": "string",
+            "enum": ["activate", "clear"]
+          },
+          "region": {
+            "type": "string"
+          },
+          "duration": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "headline": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "effective": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      }
+    dest: "{{ callansible_dir }}/openprose/schemas/weather_alert.schema.json"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'

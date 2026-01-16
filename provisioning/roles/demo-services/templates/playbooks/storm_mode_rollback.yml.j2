@@ -1,0 +1,37 @@
+---
+- name: Storm Mode Rollback
+  hosts: localhost
+  gather_facts: false
+  vars:
+    region: "{{ '{{' }} region | default('us-east-1') {{ '}}' }}"
+    request_id: "{{ '{{' }} request_id | default('unknown') {{ '}}' }}"
+
+  tasks:
+    - name: Log rollback start
+      debug:
+        msg: "ROLLING BACK storm mode for {{ '{{' }} region {{ '}}' }} (request: {{ '{{' }} request_id {{ '}}' }})"
+
+    - name: Check for backup rules
+      stat:
+        path: "/opt/storm_mode/backup_{{ '{{' }} request_id {{ '}}' }}.rules"
+      register: backup_file
+
+    - name: Restore from backup if available
+      shell: "iptables-restore < /opt/storm_mode/backup_{{ '{{' }} request_id {{ '}}' }}.rules"
+      when: backup_file.stat.exists
+      delegate_to: localhost
+
+    - name: Flush storm mode rules if no backup
+      shell: |
+        iptables -D INPUT -p tcp --dport 22 -j ACCEPT -m comment --comment "Storm mode - SSH" 2>/dev/null || true
+        iptables -D INPUT -p tcp --dport 443 -j ACCEPT -m comment --comment "Storm mode - HTTPS" 2>/dev/null || true
+        iptables -D INPUT -p udp --dport 51820 -j ACCEPT -m comment --comment "Storm mode - WireGuard VPN" 2>/dev/null || true
+        iptables -D INPUT -p tcp --dport 5060 -j ACCEPT -m comment --comment "Storm mode - SIP signaling" 2>/dev/null || true
+        iptables -D INPUT -p tcp --dport 9090 -j ACCEPT -m comment --comment "Storm mode - Prometheus" 2>/dev/null || true
+        iptables -D INPUT -p tcp --dport 8080 -j DROP -m comment --comment "Storm mode - Block nonessential" 2>/dev/null || true
+      when: not backup_file.stat.exists
+      delegate_to: localhost
+
+    - name: Rollback complete
+      debug:
+        msg: "Storm mode DEACTIVATED for {{ '{{' }} region {{ '}}' }}. Normal operations restored. Request: {{ '{{' }} request_id {{ '}}' }}"

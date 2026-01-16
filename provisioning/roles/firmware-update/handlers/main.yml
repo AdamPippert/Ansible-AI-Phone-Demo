@@ -1,0 +1,13 @@
+---
+# Firmware Update Role - Handlers
+
+- name: Restart fwupd
+  ansible.builtin.systemd:
+    name: fwupd
+    state: restarted
+
+- name: Reboot for firmware
+  ansible.builtin.reboot:
+    msg: "Rebooting to apply firmware updates"
+    reboot_timeout: 600
+    post_reboot_delay: 30

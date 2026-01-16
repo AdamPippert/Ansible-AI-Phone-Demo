@@ -1,0 +1,64 @@
+---
+# Voice Bridge Configuration Deployment
+
+- name: Deploy voice-bridge Dockerfile
+  ansible.builtin.template:
+    src: voice-bridge/Dockerfile.j2
+    dest: "{{ callansible_dir }}/voice-bridge/Dockerfile"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy voice-bridge requirements.txt
+  ansible.builtin.copy:
+    content: |
+      fastapi>=0.109.0
+      uvicorn>=0.27.0
+      ari-py>=0.1.3
+      websockets>=12.0
+      httpx>=0.26.0
+      faster-whisper>=1.0.0
+      piper-tts>=1.2.0
+      numpy>=1.26.0
+      soundfile>=0.12.0
+      python-dotenv>=1.0.0
+    dest: "{{ callansible_dir }}/voice-bridge/requirements.txt"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy voice-bridge config.py
+  ansible.builtin.template:
+    src: voice-bridge/config.py.j2
+    dest: "{{ callansible_dir }}/voice-bridge/config.py"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy voice-bridge prompts.py
+  ansible.builtin.template:
+    src: voice-bridge/prompts.py.j2
+    dest: "{{ callansible_dir }}/voice-bridge/prompts.py"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Create voice-bridge placeholder files
+  ansible.builtin.copy:
+    content: |
+      # TODO: Implement {{ item | basename | splitext | first }}
+      # See SPEC.md for implementation details
+      pass
+    dest: "{{ callansible_dir }}/voice-bridge/{{ item }}"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+    force: false
+  loop:
+    - main.py
+    - ari_client.py
+    - stt.py
+    - tts.py
+    - llm.py
+    - aap.py
+    - call_handler.py

@@ -1,0 +1,129 @@
+# CallAnsible Project .gitignore
+
+# =============================================================================
+# Credentials and Secrets - NEVER COMMIT THESE
+# =============================================================================
+credentials.yml
+**/credentials.yml
+*.vault.yml
+.env
+**/.env
+*.env.local
+**/*.env.local
+
+# Ansible vault password files
+.vault_pass
+.vault_password
+vault_password.txt
+
+# =============================================================================
+# Provisioning
+# =============================================================================
+provisioning/credentials.yml
+provisioning/*.retry
+
+# =============================================================================
+# CallAnsible Application
+# =============================================================================
+# Environment files
+CallAnsible/.env
+CallAnsible/*.env.local
+
+# Audio files (runtime generated)
+CallAnsible/audio/*.wav
+CallAnsible/audio/*.raw
+CallAnsible/audio/*.mp3
+CallAnsible/audio/*.ogg
+
+# Models (downloaded separately, too large for git)
+CallAnsible/models/piper/*.onnx
+CallAnsible/models/piper/*.onnx.json
+CallAnsible/models/**/*.bin
+CallAnsible/models/**/*.safetensors
+
+# AWX/AAP data
+CallAnsible/aap-data/
+
+# Storm mode backups
+/opt/storm_mode/
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+env/
+.python-version
+
+# =============================================================================
+# IDE and Editors
+# =============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# =============================================================================
+# OS Generated
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# =============================================================================
+# Logs and Temporary Files
+# =============================================================================
+*.log
+*.tmp
+*.temp
+*.bak
+*.backup
+/tmp/
+.cache/
+
+# =============================================================================
+# Ansible
+# =============================================================================
+*.retry
+inventory/*.yml
+!inventory.yml
+!inventory/*.example.yml
+
+# =============================================================================
+# Container/Podman
+# =============================================================================
+.container-*
+podman-compose.override.yml
+docker-compose.override.yml

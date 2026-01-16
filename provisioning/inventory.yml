@@ -1,0 +1,17 @@
+---
+all:
+  hosts:
+    framework16:
+      ansible_host: 192.168.0.218
+      ansible_user: "{{ credentials.username | default('adam') }}"
+      ansible_python_interpreter: /usr/bin/python3
+      ansible_become_password: "{{ credentials.password }}"
+      luks_password: "{{ credentials.luks_password | default(omit) }}"
+
+  vars:
+    # Project paths
+    project_root: /home/adam/Development/Ansible-AI-Phone-Demo
+    callansible_dir: "{{ project_root }}/CallAnsible"
+
+    # Tailscale configuration
+    tailscale_authkey: "{{ lookup('env', 'TAILSCALE_AUTHKEY') | default('', true) }}"

@@ -1,0 +1,58 @@
+---
+# Tailscale VPN Setup
+
+- name: Add Tailscale repository
+  ansible.builtin.get_url:
+    url: https://pkgs.tailscale.com/stable/fedora/tailscale.repo
+    dest: /etc/yum.repos.d/tailscale.repo
+    mode: '0644'
+
+- name: Install Tailscale
+  ansible.builtin.dnf:
+    name: tailscale
+    state: present
+
+- name: Enable and start Tailscale daemon
+  ansible.builtin.systemd:
+    name: tailscaled
+    enabled: true
+    state: started
+
+- name: Check Tailscale status
+  ansible.builtin.command: tailscale status --json
+  register: tailscale_status
+  changed_when: false
+  failed_when: false
+
+- name: Parse Tailscale status
+  ansible.builtin.set_fact:
+    tailscale_connected: "{{ (tailscale_status.stdout | from_json).BackendState == 'Running' }}"
+    tailscale_ip: "{{ (tailscale_status.stdout | from_json).TailscaleIPs[0] | default('not-connected') }}"
+  when: tailscale_status.rc == 0
+
+- name: Display Tailscale connection status
+  ansible.builtin.debug:
+    msg: |
+      Tailscale Status:
+      - Connected: {{ tailscale_connected | default(false) }}
+      - IP: {{ tailscale_ip | default('not available') }}
+  when: tailscale_status.rc == 0
+
+- name: Connect to Tailscale (if authkey provided)
+  ansible.builtin.command: tailscale up {{ tailscale_up_args | default('') }} --authkey={{ tailscale_authkey }}
+  when:
+    - tailscale_authkey | default('') | length > 0
+    - not (tailscale_connected | default(false))
+  register: tailscale_connect
+  changed_when: tailscale_connect.rc == 0
+  no_log: true
+
+- name: Display Tailscale manual setup notice
+  ansible.builtin.debug:
+    msg: |
+      Tailscale is installed but not connected.
+      To connect, run: sudo tailscale up
+      Or provide TAILSCALE_AUTHKEY environment variable.
+  when:
+    - tailscale_authkey | default('') | length == 0
+    - not (tailscale_connected | default(false))

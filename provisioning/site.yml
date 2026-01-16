@@ -1,0 +1,143 @@
+---
+# CallAnsible Demo Provisioning Playbook
+# Sets up Framework 16 for voice-controlled Ansible Automation Platform demo
+#
+# Usage:
+#   # First, create your credentials file:
+#   cp credentials.yml.example credentials.yml
+#   vim credentials.yml  # Add your passwords
+#   chmod 600 credentials.yml
+#
+#   # Run the full provisioning (default: prerequisites only, skip OS rebuild):
+#   ansible-playbook -i inventory.yml site.yml -e @credentials.yml
+#
+#   # Run with full OS rebuild (update cache, upgrade all packages):
+#   ansible-playbook -i inventory.yml site.yml -e @credentials.yml -e os_full_rebuild=true
+#
+#   # Skip firmware updates (useful for re-provisioning):
+#   ansible-playbook -i inventory.yml site.yml -e @credentials.yml -e skip_firmware=true
+#
+#   # Run specific tags:
+#   ansible-playbook -i inventory.yml site.yml -e @credentials.yml --tags firmware
+#   ansible-playbook -i inventory.yml site.yml -e @credentials.yml --tags os
+#   ansible-playbook -i inventory.yml site.yml -e @credentials.yml --tags podman
+#   ansible-playbook -i inventory.yml site.yml -e @credentials.yml --tags services
+#
+# Variables:
+#   os_full_rebuild: false (default) - Install prerequisites only
+#                    true            - Full OS update and rebuild
+#   skip_firmware:   false (default) - Run firmware updates
+#                    true            - Skip firmware updates
+#
+# Tags:
+#   firmware  - BIOS and component firmware updates (runs first)
+#   os        - OS packages and system configuration
+#   nvidia    - NVIDIA GPU and container toolkit setup
+#   tailscale - Tailscale VPN configuration
+#   podman    - Podman container runtime setup
+#   services  - Demo services and container configurations
+
+- name: Provision Framework 16 for CallAnsible Demo
+  hosts: framework16
+  become: true
+  gather_facts: true
+
+  vars_files:
+    - group_vars/all.yml
+
+  pre_tasks:
+    - name: Verify credentials are provided
+      ansible.builtin.assert:
+        that:
+          - credentials is defined
+          - credentials.password is defined
+        fail_msg: |
+          Credentials not provided. Please run with:
+            ansible-playbook -i inventory.yml site.yml -e @credentials.yml
+
+          First create credentials.yml from the example:
+            cp credentials.yml.example credentials.yml
+            vim credentials.yml
+        success_msg: "Credentials loaded successfully"
+      tags: always
+
+    - name: Verify Fedora version
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Fedora"
+          - ansible_distribution_major_version | int >= 40
+        fail_msg: "This playbook requires Fedora 40 or later (found {{ ansible_distribution }} {{ ansible_distribution_version }})"
+        success_msg: "Running on {{ ansible_distribution }} {{ ansible_distribution_version }}"
+      tags: always
+
+    - name: Display provisioning configuration
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          Provisioning Configuration
+          ============================================
+          Target: {{ ansible_hostname }} ({{ ansible_host }})
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Kernel: {{ ansible_kernel }}
+          CPU: {{ ansible_processor[2] | default(ansible_processor[1]) }}
+          Memory: {{ ansible_memtotal_mb }} MB
+
+          Mode Settings:
+          - OS Full Rebuild: {{ os_full_rebuild | default(false) }}
+          - Skip Firmware:   {{ skip_firmware | default(false) }}
+
+          {% if not os_full_rebuild | default(false) %}
+          Running in PREREQUISITES ONLY mode (default).
+          Use -e os_full_rebuild=true for full OS rebuild.
+          {% else %}
+          Running in FULL REBUILD mode.
+          {% endif %}
+      tags: always
+
+  roles:
+    # Firmware updates FIRST - may require reboot before continuing
+    - role: firmware-update
+      tags: firmware
+      when: not (skip_firmware | default(false))
+
+    - role: os-setup
+      tags: [os, nvidia, tailscale]
+
+    - role: podman-setup
+      tags: podman
+
+    - role: demo-services
+      tags: services
+
+  post_tasks:
+    - name: Display completion summary
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          CallAnsible Demo Provisioning Complete!
+          ============================================
+
+          Target: {{ ansible_hostname }} ({{ ansible_host }})
+          Mode: {{ 'Full Rebuild' if os_full_rebuild | default(false) else 'Prerequisites Only' }}
+
+          Next steps:
+          1. Copy .env.example to .env and configure secrets:
+             cd {{ callansible_dir }}
+             cp .env.example .env
+             $EDITOR .env
+
+          2. Download Piper TTS model:
+             ./scripts/download-models.sh
+
+          3. Start the services:
+             podman-compose up -d
+
+          4. Configure your SIP client:
+             Server: {{ tailscale_ip | default(ansible_host) }}:5060
+             Username: speaker
+             Extension: 100
+
+          5. Verify services:
+             podman-compose ps
+             podman exec asterisk asterisk -rx "pjsip show endpoints"
+      tags: always

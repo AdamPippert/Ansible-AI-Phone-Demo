@@ -1,0 +1,23 @@
+---
+# Firmware Update Role - Default Variables
+
+fwupd_packages:
+  - fwupd
+  - fwupd-plugin-uefi
+
+# Enable LVFS testing channel for latest Framework firmware
+# Framework often releases updates to testing before stable
+firmware_enable_testing_channel: true
+
+# Apply updates automatically when found
+firmware_apply_updates: true
+
+# Require AC power for firmware updates (recommended)
+firmware_require_ac_power: true
+
+# Skip AC power check (use with caution)
+firmware_skip_ac_check: false
+
+# Automatically reboot after staging firmware updates
+# Set to false to manually control reboot timing
+firmware_auto_reboot: false

@@ -1,0 +1,74 @@
+---
+- name: Storm Mode Apply
+  hosts: localhost
+  gather_facts: false
+  vars:
+    region: "{{ '{{' }} region | default('us-east-1') {{ '}}' }}"
+    request_id: "{{ '{{' }} request_id | default('unknown') {{ '}}' }}"
+
+  tasks:
+    - name: Log storm mode activation
+      debug:
+        msg: "ACTIVATING STORM MODE for {{ '{{' }} region {{ '}}' }} (request: {{ '{{' }} request_id {{ '}}' }})"
+
+    - name: Backup current firewall rules
+      shell: "iptables-save > /opt/storm_mode/backup_{{ '{{' }} request_id {{ '}}' }}.rules"
+      delegate_to: localhost
+
+    - name: Apply emergency ACL - Allow SSH
+      iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: 22
+        jump: ACCEPT
+        comment: "Storm mode - SSH"
+      delegate_to: localhost
+
+    - name: Apply emergency ACL - Allow HTTPS
+      iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: 443
+        jump: ACCEPT
+        comment: "Storm mode - HTTPS"
+      delegate_to: localhost
+
+    - name: Apply emergency ACL - Allow VPN
+      iptables:
+        chain: INPUT
+        protocol: udp
+        destination_port: 51820
+        jump: ACCEPT
+        comment: "Storm mode - WireGuard VPN"
+      delegate_to: localhost
+
+    - name: Apply emergency ACL - Allow SIP
+      iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: 5060
+        jump: ACCEPT
+        comment: "Storm mode - SIP signaling"
+      delegate_to: localhost
+
+    - name: Apply emergency ACL - Allow monitoring
+      iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: 9090
+        jump: ACCEPT
+        comment: "Storm mode - Prometheus"
+      delegate_to: localhost
+
+    - name: Block nonessential traffic (demo port)
+      iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: 8080
+        jump: DROP
+        comment: "Storm mode - Block nonessential"
+      delegate_to: localhost
+
+    - name: Storm mode activated
+      debug:
+        msg: "Storm mode ACTIVE for {{ '{{' }} region {{ '}}' }}. Critical services protected. Request: {{ '{{' }} request_id {{ '}}' }}"

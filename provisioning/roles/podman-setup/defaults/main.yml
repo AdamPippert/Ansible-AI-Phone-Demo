@@ -1,0 +1,25 @@
+---
+# Podman Setup Role - Default Variables
+
+podman_packages:
+  - podman
+  - podman-compose
+  - buildah
+  - skopeo
+  - slirp4netns
+  - fuse-overlayfs
+  - crun
+
+podman_rootless: true
+pull_images: true
+
+project_user: adam
+project_group: adam
+
+container_images:
+  vllm: "docker.io/vllm/vllm-openai:latest"
+  asterisk: "docker.io/andrius/asterisk:latest"
+  python: "docker.io/python:3.11-slim"
+  awx: "quay.io/ansible/awx:latest"
+  eda: "quay.io/ansible/ansible-rulebook:latest"
+  nvidia_cuda: "docker.io/nvidia/cuda:12.0-base"

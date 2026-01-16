@@ -1,0 +1,33 @@
+---
+# OS Setup Role - Main Tasks
+# Configures system packages, NVIDIA GPU, and Tailscale
+#
+# Modes:
+#   os_full_rebuild: false (default) - Update packages, install prerequisites only
+#   os_full_rebuild: true            - Full OS setup including cache refresh, reinstalls
+
+- name: Display provisioning mode
+  ansible.builtin.debug:
+    msg: |
+      OS Provisioning Mode: {{ 'FULL REBUILD' if os_full_rebuild | default(false) else 'UPDATE & PREREQUISITES ONLY' }}
+      {% if not os_full_rebuild | default(false) %}
+      (Set os_full_rebuild=true for full OS rebuild)
+      {% endif %}
+  tags: always
+
+- name: Include system packages tasks
+  ansible.builtin.include_tasks: packages.yml
+  tags: os
+
+- name: Include NVIDIA setup tasks
+  ansible.builtin.include_tasks: nvidia.yml
+  tags: nvidia
+
+- name: Include Tailscale setup tasks
+  ansible.builtin.include_tasks: tailscale.yml
+  when: tailscale_enabled | default(true)
+  tags: tailscale
+
+- name: Include firewall configuration
+  ansible.builtin.include_tasks: firewall.yml
+  tags: os

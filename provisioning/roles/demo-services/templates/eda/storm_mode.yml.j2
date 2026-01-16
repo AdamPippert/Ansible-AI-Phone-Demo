@@ -1,0 +1,64 @@
+---
+- name: Storm Mode Network Response
+  hosts: all
+  sources:
+    - ansible.eda.webhook:
+        host: 0.0.0.0
+        port: {{ eda_webhook_port }}
+
+  rules:
+    - name: Trigger storm mode on severe weather
+      condition: >
+        event.alert_type == "weather" and
+        event.severity >= 3 and
+        event.action == "activate"
+      action:
+        run_job_template:
+          name: storm_mode_precheck
+          organization: Default
+          job_args:
+            extra_vars:
+              region: "{{ '{{' }} event.region {{ '}}' }}"
+              severity: "{{ '{{' }} event.severity {{ '}}' }}"
+              duration_minutes: "{{ '{{' }} event.duration | default(60) {{ '}}' }}"
+              request_id: "{{ '{{' }} event.request_id {{ '}}' }}"
+
+    - name: Apply storm mode after precheck approval
+      condition: >
+        event.alert_type == "storm_mode" and
+        event.action == "apply" and
+        event.precheck_passed == true
+      action:
+        run_job_template:
+          name: storm_mode_apply
+          organization: Default
+          job_args:
+            extra_vars:
+              region: "{{ '{{' }} event.region {{ '}}' }}"
+              request_id: "{{ '{{' }} event.request_id {{ '}}' }}"
+
+    - name: Rollback storm mode
+      condition: >
+        event.alert_type == "weather" and
+        event.action == "clear"
+      action:
+        run_job_template:
+          name: storm_mode_rollback
+          organization: Default
+          job_args:
+            extra_vars:
+              region: "{{ '{{' }} event.region {{ '}}' }}"
+              request_id: "{{ '{{' }} event.request_id {{ '}}' }}"
+
+    - name: Verify storm mode status
+      condition: >
+        event.alert_type == "storm_mode" and
+        event.action == "verify"
+      action:
+        run_job_template:
+          name: storm_mode_verify
+          organization: Default
+          job_args:
+            extra_vars:
+              region: "{{ '{{' }} event.region {{ '}}' }}"
+              request_id: "{{ '{{' }} event.request_id {{ '}}' }}"

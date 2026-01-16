@@ -1,0 +1,85 @@
+---
+# Firewall Configuration for CallAnsible Demo
+
+- name: Install firewalld
+  ansible.builtin.dnf:
+    name: firewalld
+    state: present
+
+- name: Enable and start firewalld
+  ansible.builtin.systemd:
+    name: firewalld
+    enabled: true
+    state: started
+
+- name: Allow SIP signaling (UDP)
+  ansible.posix.firewalld:
+    port: "{{ asterisk_sip_port }}/udp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Allow SIP signaling (TCP)
+  ansible.posix.firewalld:
+    port: "{{ asterisk_sip_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Allow ARI HTTP port
+  ansible.posix.firewalld:
+    port: "{{ asterisk_ari_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Allow ARI WebSocket port
+  ansible.posix.firewalld:
+    port: "{{ asterisk_ari_ws_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Allow RTP media ports
+  ansible.posix.firewalld:
+    port: "{{ asterisk_rtp_start }}-{{ asterisk_rtp_end }}/udp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Allow vLLM API port
+  ansible.posix.firewalld:
+    port: "{{ vllm_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Allow voice-bridge port
+  ansible.posix.firewalld:
+    port: "{{ voice_bridge_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Allow AAP HTTPS port
+  ansible.posix.firewalld:
+    port: "{{ aap_https_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Allow EDA webhook port
+  ansible.posix.firewalld:
+    port: "{{ eda_webhook_port }}/tcp"
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Allow Tailscale interface
+  ansible.posix.firewalld:
+    interface: tailscale0
+    zone: trusted
+    permanent: true
+    immediate: true
+    state: enabled
+  failed_when: false

@@ -1,0 +1,55 @@
+---
+- name: Storm Mode Precheck
+  hosts: localhost
+  gather_facts: false
+  vars:
+    region: "{{ '{{' }} region | default('us-east-1') {{ '}}' }}"
+    severity: "{{ '{{' }} severity | default(3) {{ '}}' }}"
+    request_id: "{{ '{{' }} request_id | default('unknown') {{ '}}' }}"
+
+  tasks:
+    - name: Log precheck start
+      debug:
+        msg: "Starting storm mode precheck for {{ '{{' }} region {{ '}}' }} (severity: {{ '{{' }} severity {{ '}}' }}, request: {{ '{{' }} request_id {{ '}}' }})"
+
+    - name: Verify target host reachability
+      wait_for:
+        host: "{{ '{{' }} hostvars['lab_edge']['ansible_host'] | default('127.0.0.1') {{ '}}' }}"
+        port: 22
+        timeout: 10
+      register: reachability
+      ignore_errors: true
+
+    - name: Check current firewall state
+      command: "iptables -L -n"
+      register: current_rules
+      changed_when: false
+      delegate_to: localhost
+
+    - name: Validate rollback script exists
+      stat:
+        path: /opt/storm_mode/rollback.sh
+      register: rollback_script
+      delegate_to: localhost
+
+    - name: Generate expected diff
+      debug:
+        msg: |
+          Expected changes for {{ '{{' }} region {{ '}}' }}:
+          + ACCEPT tcp dport 22 (SSH)
+          + ACCEPT tcp dport 443 (HTTPS)
+          + ACCEPT udp dport 51820 (WireGuard)
+          + ACCEPT tcp dport 5060 (SIP)
+          - DROP all nonessential traffic
+
+    - name: Precheck summary
+      set_fact:
+        precheck_result:
+          passed: "{{ '{{' }} reachability is success {{ '}}' }}"
+          region: "{{ '{{' }} region {{ '}}' }}"
+          request_id: "{{ '{{' }} request_id {{ '}}' }}"
+          rollback_available: "{{ '{{' }} rollback_script.stat.exists | default(false) {{ '}}' }}"
+
+    - name: Report precheck status
+      debug:
+        msg: "Precheck {{ '{{' }} 'PASSED' if precheck_result.passed else 'FAILED' {{ '}}' }} for request {{ '{{' }} request_id {{ '}}' }}"

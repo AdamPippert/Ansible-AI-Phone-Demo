@@ -1,0 +1,107 @@
+---
+# Demo Playbooks Deployment
+
+- name: Deploy self_healing_workflow.yml
+  ansible.builtin.copy:
+    content: |
+      ---
+      - name: Deploy Self-Healing Workflow
+        hosts: localhost
+        gather_facts: false
+        vars:
+          tier: "{{ '{{' }} tier | default('production') {{ '}}' }}"
+
+        tasks:
+          - name: Display deployment start
+            debug:
+              msg: "Deploying self-healing workflow for {{ '{{' }} tier {{ '}}' }} tier"
+
+          - name: Simulate self-healing agent deployment
+            pause:
+              seconds: 5
+
+          - name: Configure monitoring endpoints
+            debug:
+              msg: "Monitoring endpoints configured for {{ '{{' }} tier {{ '}}' }}"
+
+          - name: Enable auto-recovery policies
+            debug:
+              msg: "Auto-recovery policies enabled"
+
+          - name: Deployment complete
+            debug:
+              msg: "Self-healing workflow active on {{ '{{' }} tier {{ '}}' }} tier"
+    dest: "{{ callansible_dir }}/playbooks/self_healing_workflow.yml"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy health_check.yml
+  ansible.builtin.copy:
+    content: |
+      ---
+      - name: Infrastructure Health Check
+        hosts: localhost
+        gather_facts: false
+
+        tasks:
+          - name: Check node status
+            debug:
+              msg: "All nodes healthy"
+
+          - name: Check CPU utilization
+            set_fact:
+              cpu_usage: "{{ '{{' }} range(8, 20) | random {{ '}}' }}"
+
+          - name: Check memory utilization
+            set_fact:
+              memory_usage: "{{ '{{' }} range(25, 45) | random {{ '}}' }}"
+
+          - name: Report status
+            debug:
+              msg: "CPU: {{ '{{' }} cpu_usage {{ '}}' }}%, Memory: {{ '{{' }} memory_usage {{ '}}' }}%, No alerts"
+    dest: "{{ callansible_dir }}/playbooks/health_check.yml"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy scale_deployment.yml
+  ansible.builtin.copy:
+    content: |
+      ---
+      - name: Scale Deployment
+        hosts: localhost
+        gather_facts: false
+        vars:
+          target: "{{ '{{' }} target | default('web') {{ '}}' }}"
+          replicas: "{{ '{{' }} replicas | default(3) {{ '}}' }}"
+
+        tasks:
+          - name: Display scaling operation
+            debug:
+              msg: "Scaling {{ '{{' }} target {{ '}}' }} tier to {{ '{{' }} replicas {{ '}}' }} replicas"
+
+          - name: Simulate scaling
+            pause:
+              seconds: 3
+
+          - name: Scaling complete
+            debug:
+              msg: "{{ '{{' }} target {{ '}}' }} tier now running {{ '{{' }} replicas {{ '}}' }} replicas"
+    dest: "{{ callansible_dir }}/playbooks/scale_deployment.yml"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+
+- name: Deploy storm mode playbooks
+  ansible.builtin.template:
+    src: "playbooks/{{ item }}.j2"
+    dest: "{{ callansible_dir }}/playbooks/{{ item }}"
+    owner: "{{ project_user }}"
+    group: "{{ project_group }}"
+    mode: '0644'
+  loop:
+    - storm_mode_precheck.yml
+    - storm_mode_apply.yml
+    - storm_mode_verify.yml
+    - storm_mode_rollback.yml
